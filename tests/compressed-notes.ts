@@ -35,6 +35,7 @@ describe("compressed-notes", () => {
   const firstNote = "hello world"
   const secondNote = "0".repeat(917)
   const updatedNote = "updated note"
+  const deletedNote = ""
 
   // Derive the PDA to use as the tree authority for the merkle tree account
   // This is a PDA derived from the Note program, which allows the program to sign for appends instructions to the tree
@@ -133,5 +134,32 @@ describe("compressed-notes", () => {
 
     assert(hash === Buffer.from(noteLog.leafNode).toString("hex"))
     assert(updatedNote === noteLog.note)
+  })
+
+  it("Delete First Note", async () => {
+    const merkleTreeAccount =
+      await ConcurrentMerkleTreeAccount.fromAccountAddress(
+        connection,
+        merkleTree.publicKey
+      )
+
+    const rootKey = merkleTreeAccount.tree.changeLogs[0].root
+    const root = Array.from(rootKey.toBuffer())
+
+    const txSignature = await program.methods
+      .deleteNote(0, root, updatedNote)
+      .accounts({
+        merkleTree: merkleTree.publicKey,
+        treeAuthority: treeAuthority,
+        logWrapper: SPL_NOOP_PROGRAM_ID,
+        compressionProgram: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID,
+      })
+      .rpc()
+
+    const noteLog = await getNoteLog(connection, txSignature)
+    const hash = getHash(deletedNote, provider.publicKey)
+
+    assert(hash === Buffer.from(noteLog.leafNode).toString("hex"))
+    assert(deletedNote === noteLog.note)
   })
 })

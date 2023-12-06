@@ -143,6 +143,78 @@ pub mod compressed_notes {
 
         Ok(())
     }
+
+
+    // Instruction for deleting a note from a tree.
+    // All we are doing is setting a blank note to 'delete'.
+    // This is because we cannot actually delete a leaf node from the merkle tree.
+    // So, this function is virtually the same as updating a note with a blank note.
+    // Note that the owner stays the update authority.
+    // So an additional 'change_authority' instruction may be needed depending on your use-case.
+    pub fn delete_note(
+        ctx: Context<NoteAccounts>,
+        index: u32,
+        root: [u8; 32],
+        old_note: String,
+    ) -> Result<()> {
+
+        // The only difference between this and the update function
+        let new_note = "".to_string();
+
+        let old_leaf =
+            keccak::hashv(&[old_note.as_bytes(), ctx.accounts.owner.key().as_ref()]).to_bytes();
+
+        let merkle_tree = ctx.accounts.merkle_tree.key();
+
+        // Define the seeds for pda signing
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            merkle_tree.as_ref(), // The address of the merkle tree account as a seed
+            &[*ctx.bumps.get("tree_authority").unwrap()], // The bump seed for the pda
+        ]];
+
+        // Verify Leaf
+        {
+            if old_note == new_note {
+                msg!("Notes are the same!");
+                return Ok(());
+            }
+
+            let cpi_ctx = CpiContext::new_with_signer(
+                ctx.accounts.compression_program.to_account_info(), // The spl account compression program
+                VerifyLeaf {
+                    merkle_tree: ctx.accounts.merkle_tree.to_account_info(), // The merkle tree account to be modified
+                },
+                signer_seeds, // The seeds for pda signing
+            );
+            // Verify or Fails
+            verify_leaf(cpi_ctx, root, old_leaf, index)?;
+        }
+
+        let new_leaf =
+            keccak::hashv(&[new_note.as_bytes(), ctx.accounts.owner.key().as_ref()]).to_bytes();
+
+        // Log out for indexers
+        let note_log = NoteLog::new(new_leaf.clone(), ctx.accounts.owner.key().clone(), new_note);
+        // Log the "note log" data using noop program
+        wrap_application_data_v1(note_log.try_to_vec()?, &ctx.accounts.log_wrapper)?;
+
+        // replace leaf
+        {
+            let cpi_ctx = CpiContext::new_with_signer(
+                ctx.accounts.compression_program.to_account_info(), // The spl account compression program
+                Modify {
+                    authority: ctx.accounts.tree_authority.to_account_info(), // The authority for the merkle tree, using a PDA
+                    merkle_tree: ctx.accounts.merkle_tree.to_account_info(), // The merkle tree account to be modified
+                    noop: ctx.accounts.log_wrapper.to_account_info(), // The noop program to log data
+                },
+                signer_seeds, // The seeds for pda signing
+            );
+            // CPI to append the leaf node to the merkle tree
+            replace_leaf(cpi_ctx, root, old_leaf, new_leaf, index)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(AnchorSerialize)]
