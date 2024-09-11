@@ -14,7 +14,29 @@ use spl_account_compression::{
 
 declare_id!("2CCvZS82NbYtLDuQgegGJB9pspjMizama2tQQy8Vu6Ps");
 
-// STRUCTS GO HERE
+#[error_code]
+pub enum CompressedNotesError {
+    #[msg("Invalid tree depth")]
+    InvalidTreeDepth,
+    #[msg("Invalid buffer size")]
+    InvalidBufferSize,
+    #[msg("Notes are identical")]
+    IdenticalNotes,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct NoteLog {
+    leaf_node: [u8; 32],  // The leaf node hash
+    owner: Pubkey,        // Pubkey of the note owner
+    note: String,         // The note message
+}
+
+impl NoteLog {
+    // Constructs a new note from given leaf node and message
+    pub fn new(leaf_node: [u8; 32], owner: Pubkey, note: String) -> Self {
+        Self { leaf_node, owner, note }
+    }
+}
 
 #[program]
 pub mod compressed_notes {
@@ -26,6 +48,14 @@ pub mod compressed_notes {
         max_depth: u32,       // Max depth of the merkle tree
         max_buffer_size: u32, // Max buffer size of the merkle tree
     ) -> Result<()> {
+        // Input validation
+        if max_depth < 3 || max_depth > 30 {
+            return Err(CompressedNotesError::InvalidTreeDepth.into());
+        }
+        if max_buffer_size < 8 || max_buffer_size > 1024 {
+            return Err(CompressedNotesError::InvalidBufferSize.into());
+        }
+
         // Get the address for the merkle tree account
         let merkle_tree = ctx.accounts.merkle_tree.key();
 
@@ -89,6 +119,10 @@ pub mod compressed_notes {
         old_note: String,
         new_note: String,
     ) -> Result<()> {
+        if old_note == new_note {
+            return Err(CompressedNotesError::IdenticalNotes.into());
+        }
+
         let old_leaf =
             keccak::hashv(&[old_note.as_bytes(), ctx.accounts.owner.key().as_ref()]).to_bytes();
 
@@ -102,11 +136,6 @@ pub mod compressed_notes {
 
         // Verify Leaf
         {
-            if old_note == new_note {
-                msg!("Notes are the same!");
-                return Ok(());
-            }
-
             let cpi_ctx = CpiContext::new_with_signer(
                 ctx.accounts.compression_program.to_account_info(), // The spl account compression program
                 VerifyLeaf {
@@ -142,20 +171,6 @@ pub mod compressed_notes {
         }
 
         Ok(())
-    }
-}
-
-#[derive(AnchorSerialize)]
-pub struct NoteLog {
-    leaf_node: [u8; 32],  // The leaf node hash
-    owner: Pubkey,        // Pubkey of the note owner
-    note: String,         // The note message
-}
-
-impl NoteLog {
-    // Constructs a new note from given leaf node and message
-    pub fn new(leaf_node: [u8; 32], owner: Pubkey, note: String) -> Self {
-        Self { leaf_node, owner, note }
     }
 }
 
