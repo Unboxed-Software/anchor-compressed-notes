@@ -16,7 +16,7 @@ use spl_account_compression::{
 declare_id!("PROGRAM_PUBLIC_KEY_GOES_HERE");
 
 /// A program that manages compressed notes using a Merkle tree for efficient storage and verification.
-
+#[program]
 pub mod compressed_notes {
     use super::*;
 
@@ -151,7 +151,7 @@ pub struct NoteAccounts<'info> {
     /// The SPL Account Compression program used for Merkle tree operations.
     pub compression_program: Program<'info, SplAccountCompression>,
 }
-
+#[program]
 pub mod compressed_notes {
     use super::*;
 
@@ -195,9 +195,9 @@ pub mod compressed_notes {
         Ok(())
     }
 
-    // ...
+    // Additional functions for the program can go here...
 }
-
+#[program]
 pub mod compressed_notes {
     use super::*;
 
@@ -249,7 +249,7 @@ pub mod compressed_notes {
 
     //...
 }
-
+#[program]
 pub mod compressed_notes {
     use super::*;
 
