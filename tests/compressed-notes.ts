@@ -48,9 +48,9 @@ describe("compressed-notes", () => {
         maxDepth: 3,
         maxBufferSize: 8,
       };
-
+    
       const canopyDepth = 0;
-
+    
       // Instruction to create a new account with the required space for the tree
       const allocTreeIx = await createAllocTreeIx(
         connection,
@@ -59,7 +59,7 @@ describe("compressed-notes", () => {
         maxDepthSizePair,
         canopyDepth,
       );
-
+    
       // Instruction to initialize the tree through the Note program
       const ix = await program.methods
         .createNoteTree(
@@ -74,7 +74,7 @@ describe("compressed-notes", () => {
           compressionProgram: SPL_ACCOUNT_COMPRESSION_PROGRAM_ID,
         })
         .instruction();
-
+    
       const tx = new Transaction().add(allocTreeIx, ix);
       await sendAndConfirmTransaction(connection, tx, [
         wallet.payer,
@@ -82,13 +82,11 @@ describe("compressed-notes", () => {
       ]);
 
       // Fetch the Merkle tree account to confirm it's initialized
-      const merkleTreeAccount = await program.account.merkleTree.fetch(
-        merkleTree.publicKey,
+      const merkleTreeAccount = await ConcurrentMerkleTreeAccount.fromAccountAddress(
+        connection,
+        merkleTree.publicKey
       );
-      assert(
-        merkleTreeAccount.isInitialized,
-        "Merkle tree should be initialized",
-      );
+      assert(merkleTreeAccount, "Merkle tree should be initialized");
     });
 
     it("adds a note to the Merkle tree", async () => {
@@ -108,7 +106,7 @@ describe("compressed-notes", () => {
 
       assert(
         hash === Buffer.from(noteLog.leafNode).toString("hex"),
-        "Leaf node hash should match",
+        "Leaf node hash should match"
       );
       assert(firstNote === noteLog.note, "Note should match the appended note");
     });
@@ -130,20 +128,20 @@ describe("compressed-notes", () => {
 
       assert(
         hash === Buffer.from(noteLog.leafNode).toString("hex"),
-        "Leaf node hash should match",
+        "Leaf node hash should match"
       );
       assert(
         secondNote === noteLog.note,
-        "Note should match the appended max size note",
+        "Note should match the appended max size note"
       );
     });
 
     it("updates the first note in the Merkle tree", async () => {
-      const merkleTreeAccount = await program.account.merkleTree.fetch(
-        merkleTree.publicKey,
+      const merkleTreeAccount = await ConcurrentMerkleTreeAccount.fromAccountAddress(
+        connection,
+        merkleTree.publicKey
       );
-      const rootKey = merkleTreeAccount.tree.changeLogs[0].root;
-      const root = Array.from(rootKey.toBuffer());
+      const root = merkleTreeAccount.getCurrentRoot();
 
       const txSignature = await program.methods
         .updateNote(0, root, firstNote, updatedNote)
@@ -161,11 +159,11 @@ describe("compressed-notes", () => {
 
       assert(
         hash === Buffer.from(noteLog.leafNode).toString("hex"),
-        "Leaf node hash should match after update",
+        "Leaf node hash should match after update"
       );
       assert(
         updatedNote === noteLog.note,
-        "Updated note should match the logged note",
+        "Updated note should match the logged note"
       );
     });
   });
